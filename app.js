@@ -6,7 +6,7 @@
 // O ID é o trecho da URL entre /d/ e /edit, ex:
 // https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit
 //                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^ isso aqui
-const SHEET_ID = "1Wf63JsqDnIe1B6P67ePI7HOKhAE0iSp6l-pYHlCuJfo";
+const SHEET_ID = "1Wf63JsqDnIe1B6P67ePI7HOKhAE0iSp6l-pYHlCuJfo"; 
 
 // Opcional: se os dados estiverem numa aba que NÃO é a primeira, cole o "gid"
 // dessa aba (o número depois de "gid=" na URL quando você está com a aba
@@ -14,7 +14,7 @@ const SHEET_ID = "1Wf63JsqDnIe1B6P67ePI7HOKhAE0iSp6l-pYHlCuJfo";
 const SHEET_GID = "0";
 
 const SHEET_CSV_URL =
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${SHEET_GID}`;
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
 
 // Nome das colunas na planilha (ajuste se seus cabeçalhos forem diferentes)
 const COL_DATA = "Data";
