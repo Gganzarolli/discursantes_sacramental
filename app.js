@@ -6,15 +6,12 @@
 // O ID é o trecho da URL entre /d/ e /edit, ex:
 // https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit
 //                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^ isso aqui
-const SHEET_ID = "1Wf63JsqDnIe1B6P67ePI7HOKhAE0iSp6l-pYHlCuJfo"; 
+const SHEET_ID = "1Wf63JsqDnIe1B6P67ePI7HOKhAE0iSp6l-pYHlCuJfo";
 
 // Opcional: se os dados estiverem numa aba que NÃO é a primeira, cole o "gid"
 // dessa aba (o número depois de "gid=" na URL quando você está com a aba
 // aberta). Deixe "0" se for a primeira aba.
 const SHEET_GID = "0";
-
-const SHEET_CSV_URL =
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${SHEET_GID}`;
 
 // Nome das colunas na planilha (ajuste se seus cabeçalhos forem diferentes)
 const COL_DATA = "Data";
@@ -162,9 +159,9 @@ function showState(message, isError) {
 }
 
 function load() {
-  if (!SHEET_CSV_URL || SHEET_CSV_URL.includes("COLE_AQUI")) {
+  if (!SHEET_ID || SHEET_ID.includes("COLE_AQUI")) {
     showState(
-      "Configure o link da planilha em app.js (constante SHEET_CSV_URL). Veja o README.md.",
+      "Configure o ID da planilha em app.js (constante SHEET_ID). Veja o README.md.",
       true
     );
     updatedEl.textContent = "não configurado";
@@ -174,29 +171,92 @@ function load() {
   showState("Buscando dados da planilha…", false);
   updatedEl.textContent = "atualizando…";
 
-  const bustCache = SHEET_CSV_URL + (SHEET_CSV_URL.includes("?") ? "&" : "?") + "_=" + Date.now();
+  // Remove uma tentativa anterior, se existir
+  const oldScript = document.getElementById("gviz-loader");
+  if (oldScript) oldScript.remove();
 
-  fetch(bustCache)
-    .then((res) => {
-      if (!res.ok) throw new Error("Falha ao buscar a planilha (HTTP " + res.status + ")");
-      return res.text();
-    })
-    .then((csvText) => {
-      const parsed = Papa.parse(csvText, { header: true, skipEmptyLines: true });
-      if (parsed.errors && parsed.errors.length) {
-        console.warn("Avisos ao ler CSV:", parsed.errors);
+  let finished = false;
+
+  // Timeout de segurança: se em 10s a planilha não respondeu
+  // (rede ruim, planilha não pública, etc), mostra erro.
+  const timeoutId = setTimeout(() => {
+    if (finished) return;
+    finished = true;
+    console.error("Timeout esperando resposta da planilha");
+    showState(
+      "Não foi possível carregar os dados. Verifique sua conexão e se a planilha está compartilhada como 'Qualquer pessoa com o link'.",
+      true
+    );
+    updatedEl.textContent = "erro ao atualizar";
+  }, 10000);
+
+  // Callback global que o Google vai chamar com os dados (técnica JSONP,
+  // não sofre bloqueio de CORS como fetch() sofreria).
+  window.handleGvizResponse = function (json) {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timeoutId);
+
+    try {
+      if (!json || json.status === "error" || !json.table) {
+        throw new Error("Resposta da planilha veio com erro: " + JSON.stringify(json && json.errors));
       }
-      const byCategory = buildRanking(parsed.data);
+
+      const cols = json.table.cols.map((c) => (c.label || "").trim());
+      const idxData = cols.indexOf(COL_DATA);
+      const idxNome = cols.indexOf(COL_NOME);
+      const idxRating = cols.indexOf(COL_RATING);
+
+      if (idxNome === -1 || idxRating === -1 || idxData === -1) {
+        throw new Error(
+          "Não encontrei as colunas " + COL_DATA + "/" + COL_NOME + "/" + COL_RATING + " nos cabeçalhos: " + cols.join(", ")
+        );
+      }
+
+      const rows = (json.table.rows || []).map((r) => {
+        const cell = (i) => (r.c && r.c[i] ? r.c[i] : null);
+        const cData = cell(idxData);
+        const cNome = cell(idxNome);
+        const cRating = cell(idxRating);
+        return {
+          [COL_DATA]: cData ? (cData.f || cData.v) : "",
+          [COL_NOME]: cNome ? (cNome.f || cNome.v) : "",
+          [COL_RATING]: cRating ? (cRating.f || cRating.v) : "",
+        };
+      });
+
+      const byCategory = buildRanking(rows);
       render(byCategory);
       updatedEl.textContent =
         "atualizado às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-    })
-    .catch((err) => {
+    } catch (err) {
       console.error(err);
       showState(
-        "Não foi possível carregar os dados. Verifique sua conexão e se a planilha está publicada corretamente.",
+        "Os dados da planilha vieram num formato inesperado. Confira os nomes das colunas (Data, Nome, Rating) em app.js.",
         true
       );
       updatedEl.textContent = "erro ao atualizar";
-    });
+    }
+  };
+
+  const src =
+    `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq` +
+    `?gid=${encodeURIComponent(SHEET_GID)}` +
+    `&tqx=out:json;responseHandler:handleGvizResponse` +
+    `&_=${Date.now()}`;
+
+  const script = document.createElement("script");
+  script.id = "gviz-loader";
+  script.src = src;
+  script.onerror = () => {
+    if (finished) return;
+    finished = true;
+    clearTimeout(timeoutId);
+    showState(
+      "Não foi possível carregar os dados. Verifique sua conexão e se a planilha está compartilhada como 'Qualquer pessoa com o link'.",
+      true
+    );
+    updatedEl.textContent = "erro ao atualizar";
+  };
+  document.body.appendChild(script);
 }

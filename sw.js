@@ -1,4 +1,4 @@
-const CACHE_NAME = "discursantes-v2";
+const CACHE_NAME = "discursantes-v3";
 const APP_SHELL = ["./", "./index.html", "./app.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {
@@ -22,12 +22,19 @@ self.addEventListener("activate", (event) => {
 // Para o app shell, cache-first com fallback de rede.
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
-  const isAppShell = APP_SHELL.some((p) => url.pathname.endsWith(p.replace("./", "")));
+
+  // Só mexe em requisições do PRÓPRIO site (mesma origem). Qualquer coisa
+  // externa (Google Sheets, etc) passa direto pela rede, sem cache.
+  if (url.origin !== self.location.origin) return;
+
+  const isAppShell = APP_SHELL.some((p) => {
+    const clean = p === "./" ? "" : p.replace("./", "");
+    return clean === "" ? url.pathname.endsWith("/") : url.pathname.endsWith(clean);
+  });
 
   if (isAppShell) {
     event.respondWith(
       caches.match(event.request).then((cached) => cached || fetch(event.request))
     );
   }
-  // outras requisições (ex: CSV do Sheets, PapaParse via CDN) seguem direto pra rede
 });
