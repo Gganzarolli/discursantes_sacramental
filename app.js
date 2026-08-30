@@ -6,7 +6,7 @@
 // O ID é o trecho da URL entre /d/ e /edit, ex:
 // https://docs.google.com/spreadsheets/d/1AbCdEfGhIjKlMnOpQrStUvWxYz/edit
 //                                        ^^^^^^^^^^^^^^^^^^^^^^^^^^ isso aqui
-const SHEET_ID = "COLE_AQUI_O_ID_DA_SUA_PLANILHA";
+const SHEET_ID = "1Wf63JsqDnIe1B6P67ePI7HOKhAE0iSp6l-pYHlCuJfo";
 
 // Opcional: se os dados estiverem numa aba que NÃO é a primeira, cole o "gid"
 // dessa aba (o número depois de "gid=" na URL quando você está com a aba
