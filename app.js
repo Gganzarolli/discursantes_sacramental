@@ -31,7 +31,7 @@ const SUGGESTED_COUNT = 1;
 
 // Cole aqui a URL do Apps Script (veja AppsScript.gs / README.md "Passo 6").
 // Enquanto estiver com o valor de exemplo, o botão de salvar fica desativado.
-const WRITE_URL = "COLE_AQUI_A_URL_DO_APPS_SCRIPT";
+const WRITE_URL = "https://script.google.com/macros/s/AKfycbwhjHpUFTvC3Fq9e8bzV9d2vr4InRREl8cPdt29oOIBYM8xjLGVKjaVlOZu5cDMy5wjEg/exec";
 
 // Só preencha se você definiu um SECRET no AppsScript.gs. Deixe "" se não usou.
 const WRITE_SECRET = "";
