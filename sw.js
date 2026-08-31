@@ -1,4 +1,4 @@
-const CACHE_NAME = "discursantes-v4";
+const CACHE_NAME = "discursantes-v5";
 const APP_SHELL = ["./", "./index.html", "./app.js", "./manifest.json"];
 
 self.addEventListener("install", (event) => {

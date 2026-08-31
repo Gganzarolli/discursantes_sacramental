@@ -17,6 +17,7 @@ const SHEET_GID = "0";
 const COL_DATA = "Data";
 const COL_NOME = "Nome";
 const COL_RATING = "Rating";
+const COL_DESATIVAR = "Desativar"; // valores esperados: "S" (esconde) ou "N"/vazio (mostra)
 
 // Categorias: rating -> {label, minutos}
 const CATEGORIES = {
@@ -30,7 +31,7 @@ const SUGGESTED_COUNT = 1;
 
 // Cole aqui a URL do Apps Script (veja AppsScript.gs / README.md "Passo 6").
 // Enquanto estiver com o valor de exemplo, o botão de salvar fica desativado.
-const WRITE_URL = "https://script.google.com/macros/s/AKfycbwhjHpUFTvC3Fq9e8bzV9d2vr4InRREl8cPdt29oOIBYM8xjLGVKjaVlOZu5cDMy5wjEg/exec";
+const WRITE_URL = "COLE_AQUI_A_URL_DO_APPS_SCRIPT";
 
 // Só preencha se você definiu um SECRET no AppsScript.gs. Deixe "" se não usou.
 const WRITE_SECRET = "";
@@ -47,6 +48,7 @@ const appEl = document.getElementById("app");
 const updatedEl = document.getElementById("updated");
 const refreshBtn = document.getElementById("refreshBtn");
 const sundayBarEl = document.getElementById("sundayBar");
+const sundayInputEl = document.getElementById("sundayInput");
 const summaryPanelEl = document.getElementById("summaryPanel");
 const summaryRowsEl = document.getElementById("summaryRows");
 const saveAllBtn = document.getElementById("saveAllBtn");
@@ -57,8 +59,12 @@ const saveStatusEl = document.getElementById("saveStatus");
 const selection = {};
 Object.keys(CATEGORIES).forEach((r) => (selection[r] = null));
 
+let cachedNextSunday = null;
+let lastByCategory = {};
+
 refreshBtn.addEventListener("click", load);
 saveAllBtn.addEventListener("click", saveSelectionToSheet);
+initSundayPicker();
 document.addEventListener("DOMContentLoaded", load);
 // Caso o script rode depois do DOMContentLoaded já ter disparado:
 if (document.readyState !== "loading") load();
@@ -72,20 +78,46 @@ function nextSunday(from) {
   return d;
 }
 
-function renderSundayBar() {
-  const sunday = nextSunday(new Date());
-  const label = sunday.toLocaleDateString("pt-BR", {
+function isoDate(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function parseIsoDateLocal(iso) {
+  const [y, m, d] = iso.split("-").map((n) => parseInt(n, 10));
+  return new Date(y, m - 1, d);
+}
+
+function setTargetSunday(date) {
+  cachedNextSunday = date;
+  sundayInputEl.value = isoDate(date);
+  const label = date.toLocaleDateString("pt-BR", {
     weekday: "long",
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
   });
-  sundayBarEl.innerHTML = `📅 Próximo domingo: <strong>${label}</strong>`;
-  return sunday;
+  sundayBarEl.querySelector(".sunday-label").textContent = "📅 Domingo selecionado: " + label;
 }
 
-let cachedNextSunday = null;
-let lastByCategory = {};
+function initSundayPicker() {
+  setTargetSunday(nextSunday(new Date()));
+  sundayInputEl.min = isoDate(new Date());
+
+  sundayInputEl.addEventListener("change", () => {
+    if (!sundayInputEl.value) return;
+    let picked = parseIsoDateLocal(sundayInputEl.value);
+    if (picked.getDay() !== 0) {
+      picked = nextSunday(picked); // ajusta automaticamente pro domingo seguinte
+    }
+    setTargetSunday(picked);
+    // "já agendado" depende da data escolhida, então re-renderiza
+    render(lastByCategory);
+    renderSummary();
+  });
+}
 
 function parseDate(value) {
   if (!value) return null;
@@ -109,17 +141,18 @@ function daysBetween(a, b) {
 
 function buildRanking(rows) {
   // último registro por (nome, categoria)
-  const lastByKey = new Map(); // key = nome|rating -> Date mais recente
+  const lastByKey = new Map(); // key = nome|rating -> {date, desativar}
 
   rows.forEach((row) => {
     const nome = (row[COL_NOME] || "").trim();
     const rating = (row[COL_RATING] || "").toString().trim();
     const data = parseDate(row[COL_DATA]);
+    const desativar = (row[COL_DESATIVAR] || "").toString().trim().toUpperCase();
     if (!nome || !rating || !data || !CATEGORIES[rating]) return;
 
     const key = nome + "|" + rating;
     const prev = lastByKey.get(key);
-    if (!prev || data > prev) lastByKey.set(key, data);
+    if (!prev || data > prev.date) lastByKey.set(key, { date: data, desativar });
   });
 
   const today = new Date();
@@ -128,12 +161,13 @@ function buildRanking(rows) {
   const byCategory = {};
   Object.keys(CATEGORIES).forEach((r) => (byCategory[r] = []));
 
-  lastByKey.forEach((lastDate, key) => {
+  lastByKey.forEach((info, key) => {
+    if (info.desativar === "S") return; // pessoa desativada: não aparece na seleção
     const [nome, rating] = key.split("|");
     byCategory[rating].push({
       nome,
-      lastDate,
-      dias: daysBetween(today, lastDate),
+      lastDate: info.date,
+      dias: daysBetween(today, info.date),
     });
   });
 
@@ -146,7 +180,8 @@ function buildRanking(rows) {
 
 function formatLast(dias, lastDate) {
   const dateStr = lastDate.toLocaleDateString("pt-BR");
-  if (dias <= 0) return `hoje (${dateStr})`;
+  if (dias < 0) return `agendado(a) para ${dateStr}`;
+  if (dias === 0) return `hoje (${dateStr})`;
   if (dias === 1) return `há 1 dia (${dateStr})`;
   if (dias < 30) return `há ${dias} dias (${dateStr})`;
   const meses = Math.round(dias / 30);
@@ -180,14 +215,24 @@ function render(byCategory) {
       people.forEach((p, idx) => {
         const li = document.createElement("li");
         const isChosen = selection[ratingKey] === p.nome;
-        li.className = "person" + (idx < SUGGESTED_COUNT ? " suggested" : "") + (isChosen ? " chosen" : "");
+        const isScheduled = cachedNextSunday && isoDate(p.lastDate) === isoDate(cachedNextSunday);
+        li.className =
+          "person" +
+          (idx < SUGGESTED_COUNT ? " suggested" : "") +
+          (isChosen ? " chosen" : "") +
+          (isScheduled ? " scheduled" : "");
+
+        const actionHtml = isScheduled
+          ? `<span class="badge-scheduled">✓ agendado p/ este domingo</span>`
+          : `<button type="button" class="choose" data-rating="${ratingKey}" data-nome="${escapeHtml(p.nome)}">
+               ${isChosen ? "✓ escolhido" : "Escolher"}
+             </button>`;
+
         li.innerHTML = `
           <span class="rank">${idx + 1}.</span>
           <span class="name">${escapeHtml(p.nome)}</span>
+          ${actionHtml}
           <span class="last">${formatLast(p.dias, p.lastDate)}</span>
-          <button type="button" class="choose" data-rating="${ratingKey}" data-nome="${escapeHtml(p.nome)}">
-            ${isChosen ? "✓ escolhido" : "Escolher"}
-          </button>
         `;
         ul.appendChild(li);
       });
@@ -219,8 +264,6 @@ function showState(message, isError) {
 }
 
 function load() {
-  cachedNextSunday = renderSundayBar();
-
   if (!SHEET_ID || SHEET_ID.includes("COLE_AQUI")) {
     showState(
       "Configure o ID da planilha em app.js (constante SHEET_ID). Veja o README.md.",
@@ -268,6 +311,7 @@ function load() {
       const idxData = cols.indexOf(COL_DATA);
       const idxNome = cols.indexOf(COL_NOME);
       const idxRating = cols.indexOf(COL_RATING);
+      const idxDesativar = cols.indexOf(COL_DESATIVAR); // -1 se a coluna não existir, tudo bem
 
       if (idxNome === -1 || idxRating === -1 || idxData === -1) {
         throw new Error(
@@ -276,14 +320,16 @@ function load() {
       }
 
       const rows = (json.table.rows || []).map((r) => {
-        const cell = (i) => (r.c && r.c[i] ? r.c[i] : null);
+        const cell = (i) => (i !== -1 && r.c && r.c[i] ? r.c[i] : null);
         const cData = cell(idxData);
         const cNome = cell(idxNome);
         const cRating = cell(idxRating);
+        const cDesativar = cell(idxDesativar);
         return {
           [COL_DATA]: cData ? (cData.f || cData.v) : "",
           [COL_NOME]: cNome ? (cNome.f || cNome.v) : "",
           [COL_RATING]: cRating ? (cRating.f || cRating.v) : "",
+          [COL_DESATIVAR]: cDesativar ? (cDesativar.f || cDesativar.v) : "",
         };
       });
 
