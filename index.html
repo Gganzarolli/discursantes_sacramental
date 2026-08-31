@@ -167,6 +167,90 @@
   }
   .state.error{ color: var(--danger); }
 
+  .sunday-bar{
+    margin-top: 12px;
+    padding: 10px 14px;
+    background: #FBF0DE;
+    border: 1px solid #EAD6AC;
+    border-radius: 12px;
+    font-size: 13px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 10px;
+  }
+  .sunday-bar strong{ font-weight:700; }
+
+  button.choose{
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    padding: 5px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor:pointer;
+    flex-shrink:0;
+    white-space:nowrap;
+  }
+  button.choose:active{ transform: scale(0.96); }
+  li.person.chosen{
+    background: rgba(107,144,128,0.10);
+  }
+  li.person.chosen button.choose{
+    background: var(--c1);
+    border-color: var(--c1);
+    color: white;
+  }
+
+  .summary{
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 16px;
+    padding: 16px 18px;
+  }
+  .summary h2{
+    font-size: 15px;
+    margin: 0 0 10px;
+  }
+  .summary-row{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap: 10px;
+    padding: 8px 0;
+    border-top: 1px solid var(--line);
+    font-size: 14px;
+  }
+  .summary-row:first-of-type{ border-top:none; }
+  .summary-row .cat-label{ color: var(--ink-soft); font-size: 12px; }
+  .summary-row .picked-name{ font-weight:600; }
+  .summary-row .picked-name.empty-pick{ color: var(--ink-soft); font-weight:400; font-style:italic; }
+
+  button.save-all{
+    margin-top: 14px;
+    width: 100%;
+    border: none;
+    background: var(--ink);
+    color: white;
+    padding: 12px;
+    border-radius: 12px;
+    font-size: 14px;
+    font-weight: 700;
+    cursor:pointer;
+  }
+  button.save-all:disabled{
+    opacity: 0.4;
+    cursor:not-allowed;
+  }
+  .save-status{
+    margin-top: 10px;
+    font-size: 13px;
+    text-align:center;
+  }
+  .save-status.ok{ color: var(--c1); }
+  .save-status.error{ color: var(--danger); }
+
   footer{
     max-width: 760px;
     margin: 24px auto 0;
@@ -186,11 +270,21 @@
     <span class="updated" id="updated">carregando…</span>
     <button class="refresh" id="refreshBtn">Atualizar</button>
   </div>
+  <div class="sunday-bar" id="sundayBar">Calculando o próximo domingo…</div>
 </header>
 
 <main id="app">
   <div class="state" id="loadingState">Buscando dados da planilha…</div>
 </main>
+
+<div style="max-width:760px; margin: 20px auto 0; padding: 0 16px;">
+  <section class="summary" id="summaryPanel" style="display:none;">
+    <h2>Escolha para o próximo domingo</h2>
+    <div id="summaryRows"></div>
+    <button class="save-all" id="saveAllBtn" disabled>Salvar na planilha</button>
+    <div class="save-status" id="saveStatus"></div>
+  </section>
+</div>
 
 <footer>
   Dados lidos diretamente da planilha do Google Sheets. Edite <code>SHEET_ID</code> em <code>app.js</code> para conectar a sua planilha.

@@ -97,6 +97,48 @@ Esse é o link que vocês vão usar na reunião.
   na planilha do Google Sheets normalmente (data de domingo que vem, nome,
   rating). Da próxima vez que abrir o app, o ranking já reflete a escolha.
 
+## Passo 6 — Escrever na planilha automaticamente (escolher discursante)
+
+Isso permite que, ao tocar em "Escolher" num nome, o app registre
+automaticamente uma nova linha na planilha para o próximo domingo.
+
+1. Abra sua planilha no Google Sheets.
+2. Menu **Extensões → Apps Script**. Vai abrir um editor de código numa
+   aba nova.
+3. Apague o conteúdo padrão (`function myFunction() {}`) e cole o conteúdo
+   inteiro do arquivo `AppsScript.gs` (está junto com os outros arquivos
+   deste projeto).
+4. (Opcional, recomendado) Troque o valor de `SECRET` no topo do código por
+   uma senha simples inventada por você, tipo `"discurso2026"`. Se trocar,
+   anote — vai usar o mesmo valor no `app.js` daqui a pouco.
+5. Clique em **Implantar** (canto superior direito) → **Nova implantação**.
+6. Em "Tipo", clique no ícone de engrenagem e escolha **"App da Web"**.
+7. Configure:
+   - **Executar como**: Eu (sua conta)
+   - **Quem pode acessar**: Qualquer pessoa
+8. Clique em **Implantar**. O Google vai pedir para autorizar — é o seu
+   próprio script agendando escrita na sua própria planilha, pode
+   autorizar sem medo.
+9. Copie a **URL do app da Web** que aparece (algo como
+   `https://script.google.com/macros/s/AKfycb.../exec`).
+10. No `app.js`, cole essa URL em `WRITE_URL`, e se você definiu um
+    `SECRET` no passo 4, copie o mesmo valor para `WRITE_SECRET`.
+11. Salve, faça commit e push no GitHub Desktop como sempre.
+
+> **Atenção:** se um dia você editar o código do `AppsScript.gs` de novo,
+> só salvar não atualiza o app já publicado — é preciso ir em
+> **Implantar → Gerenciar implantações → editar (ícone de lápis) →
+> Nova versão → Implantar**.
+
+### Como fica o uso na reunião
+
+- Toque em "Escolher" ao lado do nome desejado em cada categoria (pode
+  trocar de ideia clicando de novo antes de salvar).
+- Um painel "Escolha para o próximo domingo" aparece embaixo mostrando os
+  3 escolhidos e a data do domingo calculada automaticamente.
+- Toque em **"Salvar na planilha"** — o app escreve as 3 linhas na
+  planilha (data do domingo, nome, categoria) e atualiza a lista sozinho.
+
 ## Limitação atual (e possível evolução)
 
 O app só enxerga quem **já tem histórico** de discurso na planilha. Um

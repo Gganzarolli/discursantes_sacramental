@@ -28,6 +28,17 @@ const CATEGORIES = {
 // Quantos nomes no topo de cada categoria marcar como "sugerido"
 const SUGGESTED_COUNT = 1;
 
+// Cole aqui a URL do Apps Script (veja AppsScript.gs / README.md "Passo 6").
+// Enquanto estiver com o valor de exemplo, o botão de salvar fica desativado.
+const WRITE_URL = "https://script.google.com/macros/s/AKfycbwhjHpUFTvC3Fq9e8bzV9d2vr4InRREl8cPdt29oOIBYM8xjLGVKjaVlOZu5cDMy5wjEg/exec";
+
+// Só preencha se você definiu um SECRET no AppsScript.gs. Deixe "" se não usou.
+const WRITE_SECRET = "";
+
+// Nome da aba para onde a nova linha vai ser escrita (deixe "" para usar a
+// primeira aba automaticamente).
+const WRITE_SHEET_NAME = "";
+
 /* ============================================================
    LÓGICA — normalmente não precisa mexer daqui pra baixo
    ============================================================ */
@@ -35,11 +46,46 @@ const SUGGESTED_COUNT = 1;
 const appEl = document.getElementById("app");
 const updatedEl = document.getElementById("updated");
 const refreshBtn = document.getElementById("refreshBtn");
+const sundayBarEl = document.getElementById("sundayBar");
+const summaryPanelEl = document.getElementById("summaryPanel");
+const summaryRowsEl = document.getElementById("summaryRows");
+const saveAllBtn = document.getElementById("saveAllBtn");
+const saveStatusEl = document.getElementById("saveStatus");
+
+// Guarda quem foi escolhido em cada categoria nesta sessão (ainda não salvo).
+// { "1": "Nome Escolhido", "2": null, "3": null }
+const selection = {};
+Object.keys(CATEGORIES).forEach((r) => (selection[r] = null));
 
 refreshBtn.addEventListener("click", load);
+saveAllBtn.addEventListener("click", saveSelectionToSheet);
 document.addEventListener("DOMContentLoaded", load);
 // Caso o script rode depois do DOMContentLoaded já ter disparado:
 if (document.readyState !== "loading") load();
+
+function nextSunday(from) {
+  const d = new Date(from);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay(); // 0 = domingo
+  const diff = (7 - day) % 7; // 0 se hoje já é domingo
+  d.setDate(d.getDate() + diff);
+  return d;
+}
+
+function renderSundayBar() {
+  const sunday = nextSunday(new Date());
+  const label = sunday.toLocaleDateString("pt-BR", {
+    weekday: "long",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  sundayBarEl.innerHTML = `📅 Próximo domingo: <strong>${label}</strong>`;
+  return sunday;
+}
+
+let cachedNextSunday = null;
+let lastByCategory = {};
 
 function parseDate(value) {
   if (!value) return null;
@@ -133,11 +179,15 @@ function render(byCategory) {
       ul.className = "people";
       people.forEach((p, idx) => {
         const li = document.createElement("li");
-        li.className = "person" + (idx < SUGGESTED_COUNT ? " suggested" : "");
+        const isChosen = selection[ratingKey] === p.nome;
+        li.className = "person" + (idx < SUGGESTED_COUNT ? " suggested" : "") + (isChosen ? " chosen" : "");
         li.innerHTML = `
           <span class="rank">${idx + 1}.</span>
           <span class="name">${escapeHtml(p.nome)}</span>
           <span class="last">${formatLast(p.dias, p.lastDate)}</span>
+          <button type="button" class="choose" data-rating="${ratingKey}" data-nome="${escapeHtml(p.nome)}">
+            ${isChosen ? "✓ escolhido" : "Escolher"}
+          </button>
         `;
         ul.appendChild(li);
       });
@@ -145,6 +195,16 @@ function render(byCategory) {
     }
 
     appEl.appendChild(section);
+  });
+
+  appEl.querySelectorAll("button.choose").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const rating = btn.getAttribute("data-rating");
+      const nome = btn.getAttribute("data-nome");
+      selection[rating] = selection[rating] === nome ? null : nome; // clique de novo desmarca
+      render(lastByCategory);
+      renderSummary();
+    });
   });
 }
 
@@ -159,6 +219,8 @@ function showState(message, isError) {
 }
 
 function load() {
+  cachedNextSunday = renderSundayBar();
+
   if (!SHEET_ID || SHEET_ID.includes("COLE_AQUI")) {
     showState(
       "Configure o ID da planilha em app.js (constante SHEET_ID). Veja o README.md.",
@@ -226,7 +288,9 @@ function load() {
       });
 
       const byCategory = buildRanking(rows);
+      lastByCategory = byCategory;
       render(byCategory);
+      renderSummary();
       updatedEl.textContent =
         "atualizado às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
     } catch (err) {
@@ -259,4 +323,79 @@ function load() {
     updatedEl.textContent = "erro ao atualizar";
   };
   document.body.appendChild(script);
+}
+
+function renderSummary() {
+  const anySelected = Object.values(selection).some((v) => v);
+  summaryPanelEl.style.display = anySelected ? "block" : "none";
+  if (!anySelected) return;
+
+  summaryRowsEl.innerHTML = "";
+  Object.entries(CATEGORIES).forEach(([ratingKey, cat]) => {
+    const nome = selection[ratingKey];
+    const row = document.createElement("div");
+    row.className = "summary-row";
+    row.innerHTML = `
+      <span class="cat-label">${cat.label} · ${cat.minutos} min</span>
+      <span class="picked-name${nome ? "" : " empty-pick"}">${nome ? escapeHtml(nome) : "não escolhido"}</span>
+    `;
+    summaryRowsEl.appendChild(row);
+  });
+
+  const writeConfigured = WRITE_URL && !WRITE_URL.includes("COLE_AQUI");
+  saveAllBtn.disabled = !anySelected || !writeConfigured;
+  saveAllBtn.textContent = writeConfigured
+    ? "Salvar na planilha"
+    : "Configure WRITE_URL em app.js primeiro";
+}
+
+function saveSelectionToSheet() {
+  const sunday = cachedNextSunday || nextSunday(new Date());
+  const entries = Object.entries(selection).filter(([, nome]) => !!nome);
+  if (entries.length === 0) return;
+
+  saveAllBtn.disabled = true;
+  saveStatusEl.className = "save-status";
+  saveStatusEl.textContent = "Salvando " + entries.length + " registro(s)…";
+
+  const dataPayloadBase = {
+    year: sunday.getFullYear(),
+    month: sunday.getMonth() + 1,
+    day: sunday.getDate(),
+  };
+
+  const requests = entries.map(([rating, nome]) =>
+    fetch(WRITE_URL, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain;charset=utf-8" }, // evita preflight de CORS
+      body: JSON.stringify({
+        secret: WRITE_SECRET,
+        sheetName: WRITE_SHEET_NAME,
+        data: dataPayloadBase,
+        nome: nome,
+        rating: rating,
+      }),
+    })
+      .then((res) => res.json())
+      .then((json) => {
+        if (!json || json.ok !== true) throw new Error((json && json.error) || "erro desconhecido");
+        return { rating, nome, ok: true };
+      })
+      .catch((err) => ({ rating, nome, ok: false, error: err.message }))
+  );
+
+  Promise.all(requests).then((results) => {
+    const failed = results.filter((r) => !r.ok);
+    if (failed.length === 0) {
+      saveStatusEl.className = "save-status ok";
+      saveStatusEl.textContent = "✓ Salvo na planilha com sucesso!";
+      Object.keys(selection).forEach((r) => (selection[r] = null));
+      setTimeout(() => load(), 1500); // recarrega a lista já refletindo a escolha
+    } else {
+      saveStatusEl.className = "save-status error";
+      saveStatusEl.textContent =
+        "Alguns não foram salvos: " + failed.map((f) => f.nome + " (" + f.error + ")").join(", ");
+      saveAllBtn.disabled = false;
+    }
+  });
 }
