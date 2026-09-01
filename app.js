@@ -48,6 +48,7 @@ const appEl = document.getElementById("app");
 const updatedEl = document.getElementById("updated");
 const refreshBtn = document.getElementById("refreshBtn");
 const collapseAllBtn = document.getElementById("collapseAllBtn");
+const viewToggleBtn = document.getElementById("viewToggleBtn");
 const sundayBarEl = document.getElementById("sundayBar");
 const sundayInputEl = document.getElementById("sundayInput");
 const summaryPanelEl = document.getElementById("summaryPanel");
@@ -62,6 +63,8 @@ Object.keys(CATEGORIES).forEach((r) => (selection[r] = null));
 
 let cachedNextSunday = null;
 let lastByCategory = {};
+let lastByPerson = [];
+let viewMode = "grouped"; // "grouped" (por categoria, padrão) ou "flat" (lista única)
 
 // Controla quais categorias estão recolhidas nesta sessão (não persiste
 // entre recarregamentos de propósito — é só pra facilitar a rolagem).
@@ -75,7 +78,13 @@ collapseAllBtn.addEventListener("click", () => {
   allCollapsedFlag = !allCollapsedFlag;
   Object.keys(collapsed).forEach((r) => (collapsed[r] = allCollapsedFlag));
   collapseAllBtn.textContent = allCollapsedFlag ? "Expandir tudo" : "Recolher tudo";
-  render(lastByCategory);
+  renderCurrent();
+});
+viewToggleBtn.addEventListener("click", () => {
+  viewMode = viewMode === "grouped" ? "flat" : "grouped";
+  viewToggleBtn.textContent = viewMode === "flat" ? "Ver por categoria" : "Ver lista única";
+  collapseAllBtn.style.display = viewMode === "flat" ? "none" : "";
+  renderCurrent();
 });
 initSundayPicker();
 document.addEventListener("DOMContentLoaded", load);
@@ -127,7 +136,7 @@ function initSundayPicker() {
     }
     setTargetSunday(picked);
     // "já agendado" depende da data escolhida, então re-renderiza
-    render(lastByCategory);
+    renderCurrent();
     renderSummary();
   });
 }
@@ -153,8 +162,10 @@ function daysBetween(a, b) {
 }
 
 function buildRanking(rows) {
-  // último registro por (nome, categoria)
+  // último registro por (nome, categoria) — usado na view "por categoria"
   const lastByKey = new Map(); // key = nome|rating -> {date, desativar}
+  // último registro geral por nome (qualquer categoria) — usado na view "lista única"
+  const lastByNome = new Map(); // nome -> {date, desativar, rating}
 
   rows.forEach((row) => {
     const nome = (row[COL_NOME] || "").trim();
@@ -166,6 +177,9 @@ function buildRanking(rows) {
     const key = nome + "|" + rating;
     const prev = lastByKey.get(key);
     if (!prev || data > prev.date) lastByKey.set(key, { date: data, desativar });
+
+    const prevNome = lastByNome.get(nome);
+    if (!prevNome || data > prevNome.date) lastByNome.set(nome, { date: data, desativar, rating });
   });
 
   const today = new Date();
@@ -188,7 +202,19 @@ function buildRanking(rows) {
     byCategory[r].sort((a, b) => b.dias - a.dias); // mais tempo sem discursar primeiro
   });
 
-  return byCategory;
+  const byPerson = [];
+  lastByNome.forEach((info, nome) => {
+    if (info.desativar === "S") return;
+    byPerson.push({
+      nome,
+      lastDate: info.date,
+      dias: daysBetween(today, info.date),
+      lastRating: info.rating, // categoria da última vez que discursou (só como referência)
+    });
+  });
+  byPerson.sort((a, b) => b.dias - a.dias);
+
+  return { byCategory, byPerson };
 }
 
 function formatLast(dias, lastDate) {
@@ -203,7 +229,7 @@ function formatLast(dias, lastDate) {
   return `há ~${anos} anos (${dateStr})`;
 }
 
-function render(byCategory) {
+function renderGrouped(byCategory) {
   appEl.innerHTML = "";
 
   Object.entries(CATEGORIES).forEach(([ratingKey, cat]) => {
@@ -219,7 +245,7 @@ function render(byCategory) {
     head.innerHTML = `<h2>${cat.label}<span class="chevron">${isCollapsed ? "▶" : "▼"}</span></h2><span class="minutes">${cat.minutos} min</span>`;
     head.addEventListener("click", () => {
       collapsed[ratingKey] = !collapsed[ratingKey];
-      render(lastByCategory);
+      renderCurrent();
     });
     section.appendChild(head);
 
@@ -276,10 +302,82 @@ function render(byCategory) {
       const rating = btn.getAttribute("data-rating");
       const nome = btn.getAttribute("data-nome");
       selection[rating] = selection[rating] === nome ? null : nome; // clique de novo desmarca
-      render(lastByCategory);
+      renderCurrent();
       renderSummary();
     });
   });
+}
+
+function renderFlat(byPerson) {
+  appEl.innerHTML = "";
+
+  const section = document.createElement("section");
+  section.className = "category cat-flat";
+
+  const head = document.createElement("div");
+  head.className = "category-head";
+  head.innerHTML = `<h2>Todos os membros — ordenado por tempo sem discursar</h2>`;
+  section.appendChild(head);
+
+  if (byPerson.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "empty";
+    empty.textContent = "Nenhum registro encontrado.";
+    section.appendChild(empty);
+  } else {
+    const ul = document.createElement("ul");
+    ul.className = "people";
+    byPerson.forEach((p, idx) => {
+      const li = document.createElement("li");
+      const isScheduled = cachedNextSunday && isoDate(p.lastDate) === isoDate(cachedNextSunday);
+      li.className = "person" + (isScheduled ? " scheduled" : "");
+
+      const lastCat = CATEGORIES[p.lastRating];
+      const lastCatHint = lastCat ? ` · última vez: ${lastCat.minutos} min` : "";
+
+      const actionHtml = isScheduled
+        ? `<span class="badge-scheduled">✓ agendado p/ este domingo</span>`
+        : `<div class="slot-buttons">` +
+          Object.entries(CATEGORIES)
+            .map(([ratingKey, cat]) => {
+              const isChosen = selection[ratingKey] === p.nome;
+              return `<button type="button" class="slot-btn slot-${ratingKey}${isChosen ? " active" : ""}"
+                        data-rating="${ratingKey}" data-nome="${escapeHtml(p.nome)}"
+                        title="${cat.label} · ${cat.minutos} min">${ratingKey}º${isChosen ? " ✓" : ""}</button>`;
+            })
+            .join("") +
+          `</div>`;
+
+      li.innerHTML = `
+        <span class="rank">${idx + 1}.</span>
+        <span class="name">${escapeHtml(p.nome)}</span>
+        ${actionHtml}
+        <span class="last">${formatLast(p.dias, p.lastDate)}${lastCatHint}</span>
+      `;
+      ul.appendChild(li);
+    });
+    section.appendChild(ul);
+  }
+
+  appEl.appendChild(section);
+
+  appEl.querySelectorAll("button.slot-btn").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const rating = btn.getAttribute("data-rating");
+      const nome = btn.getAttribute("data-nome");
+      selection[rating] = selection[rating] === nome ? null : nome; // clique de novo desmarca
+      renderCurrent();
+      renderSummary();
+    });
+  });
+}
+
+function renderCurrent() {
+  if (viewMode === "flat") {
+    renderFlat(lastByPerson);
+  } else {
+    renderGrouped(lastByCategory);
+  }
 }
 
 function escapeHtml(str) {
@@ -362,9 +460,10 @@ function load() {
         };
       });
 
-      const byCategory = buildRanking(rows);
-      lastByCategory = byCategory;
-      render(byCategory);
+      const ranking = buildRanking(rows);
+      lastByCategory = ranking.byCategory;
+      lastByPerson = ranking.byPerson;
+      renderCurrent();
       renderSummary();
       updatedEl.textContent =
         "atualizado às " + new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -410,8 +509,12 @@ function renderSummary() {
     const nome = selection[ratingKey];
     const row = document.createElement("div");
     row.className = "summary-row";
+    const label =
+      viewMode === "flat"
+        ? `${ratingKey}º orador · ${cat.minutos} min`
+        : `${cat.label} · ${cat.minutos} min`;
     row.innerHTML = `
-      <span class="cat-label">${cat.label} · ${cat.minutos} min</span>
+      <span class="cat-label">${label}</span>
       <span class="picked-name${nome ? "" : " empty-pick"}">${nome ? escapeHtml(nome) : "não escolhido"}</span>
     `;
     summaryRowsEl.appendChild(row);

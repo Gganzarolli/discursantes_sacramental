@@ -126,6 +126,31 @@
   .cat-2 .minutes{ background: var(--c2); color: white; }
   .cat-3 .category-head{ background: var(--c3-bg); }
   .cat-3 .minutes{ background: var(--c3); color: white; }
+  .cat-flat .category-head{ background: #F1EEE7; }
+
+  .slot-buttons{
+    display:flex;
+    gap: 6px;
+    flex-shrink:0;
+  }
+  button.slot-btn{
+    border: 1.5px solid var(--line);
+    background: var(--card);
+    color: var(--ink-soft);
+    padding: 5px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    cursor:pointer;
+    white-space:nowrap;
+  }
+  button.slot-btn:active{ transform: scale(0.94); }
+  button.slot-btn.slot-1{ border-color: var(--c1); color: var(--c1); }
+  button.slot-btn.slot-2{ border-color: var(--c2); color: var(--c2); }
+  button.slot-btn.slot-3{ border-color: var(--c3); color: var(--c3); }
+  button.slot-btn.slot-1.active{ background: var(--c1); color:white; }
+  button.slot-btn.slot-2.active{ background: var(--c2); color:white; }
+  button.slot-btn.slot-3.active{ background: var(--c3); color:white; }
 
   ul.people{
     list-style:none;
@@ -327,6 +352,7 @@
   <div class="toolbar">
     <span class="updated" id="updated">carregando…</span>
     <div class="btn-group">
+      <button class="collapse-all" id="viewToggleBtn">Ver lista única</button>
       <button class="collapse-all" id="collapseAllBtn">Recolher tudo</button>
       <button class="refresh" id="refreshBtn">Atualizar</button>
     </div>
