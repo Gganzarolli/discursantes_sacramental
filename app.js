@@ -47,6 +47,7 @@ const WRITE_SHEET_NAME = "";
 const appEl = document.getElementById("app");
 const updatedEl = document.getElementById("updated");
 const refreshBtn = document.getElementById("refreshBtn");
+const collapseAllBtn = document.getElementById("collapseAllBtn");
 const sundayBarEl = document.getElementById("sundayBar");
 const sundayInputEl = document.getElementById("sundayInput");
 const summaryPanelEl = document.getElementById("summaryPanel");
@@ -62,8 +63,20 @@ Object.keys(CATEGORIES).forEach((r) => (selection[r] = null));
 let cachedNextSunday = null;
 let lastByCategory = {};
 
+// Controla quais categorias estão recolhidas nesta sessão (não persiste
+// entre recarregamentos de propósito — é só pra facilitar a rolagem).
+const collapsed = {};
+Object.keys(CATEGORIES).forEach((r) => (collapsed[r] = false));
+let allCollapsedFlag = false;
+
 refreshBtn.addEventListener("click", load);
 saveAllBtn.addEventListener("click", saveSelectionToSheet);
+collapseAllBtn.addEventListener("click", () => {
+  allCollapsedFlag = !allCollapsedFlag;
+  Object.keys(collapsed).forEach((r) => (collapsed[r] = allCollapsedFlag));
+  collapseAllBtn.textContent = allCollapsedFlag ? "Expandir tudo" : "Recolher tudo";
+  render(lastByCategory);
+});
 initSundayPicker();
 document.addEventListener("DOMContentLoaded", load);
 // Caso o script rode depois do DOMContentLoaded já ter disparado:
@@ -199,10 +212,26 @@ function render(byCategory) {
     const section = document.createElement("section");
     section.className = `category cat-${ratingKey}`;
 
+    const isCollapsed = collapsed[ratingKey];
+
     const head = document.createElement("div");
     head.className = "category-head";
-    head.innerHTML = `<h2>${cat.label}</h2><span class="minutes">${cat.minutos} min</span>`;
+    head.innerHTML = `<h2>${cat.label}<span class="chevron">${isCollapsed ? "▶" : "▼"}</span></h2><span class="minutes">${cat.minutos} min</span>`;
+    head.addEventListener("click", () => {
+      collapsed[ratingKey] = !collapsed[ratingKey];
+      render(lastByCategory);
+    });
     section.appendChild(head);
+
+    if (isCollapsed) {
+      const hint = document.createElement("div");
+      hint.className = "empty";
+      hint.style.padding = "10px 18px";
+      hint.textContent = `${people.length} pessoa(s) — toque no título pra expandir`;
+      section.appendChild(hint);
+      appEl.appendChild(section);
+      return;
+    }
 
     if (people.length === 0) {
       const empty = document.createElement("div");
