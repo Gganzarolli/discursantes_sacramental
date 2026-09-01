@@ -229,7 +229,14 @@
     padding: 6px 8px;
     font-size: 13px;
     font-family: inherit;
-    color: var(--ink);
+    color: transparent; /* esconde o texto cru (vem no formato do navegador, ex: MM/DD/AAAA) */
+    width: 34px;
+    cursor: pointer;
+  }
+  .sunday-bar input[type="date"]::-webkit-calendar-picker-indicator{
+    color: initial;
+    cursor: pointer;
+    margin: 0;
   }
 
   button.choose{
@@ -326,7 +333,7 @@
   </div>
   <div class="sunday-bar" id="sundayBar">
     <span class="sunday-label">📅 Domingo selecionado: carregando…</span>
-    <input type="date" id="sundayInput">
+    <input type="date" id="sundayInput" title="Trocar o domingo selecionado" aria-label="Trocar o domingo selecionado">
   </div>
 </header>
 
